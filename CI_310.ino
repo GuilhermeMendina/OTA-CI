@@ -16,7 +16,16 @@
 #include <Update.h>
 
 
-#define FIRMWARE_RELEASE "310"
+/**************************************************************
+******************** Verificar Versão *************************/
+
+#define FIRMWARE_RELEASE "299"
+  const char* versionUrl  = "https://ota-ci.vercel.app/version.txt";
+  const char* firmwareUrl = "https://ota-ci.vercel.app/CI_300.bin";
+
+/**************************************************************
+********************** OTA************************************/
+
 #define EI_W
 #define DEBUG
 #define P1_LED            22
@@ -472,7 +481,9 @@ String getPublicIP() {
 
 
 void setup() {
-    EEPROM.begin(EEPROM_SIZE);
+
+  
+  EEPROM.begin(EEPROM_SIZE);
   isFactoryReset = !EEPROM.readBool(0);
   EEPROM.end();
 
@@ -597,9 +608,6 @@ void setup() {
 void loop() {
 
 
-  Serial.print("Versão OTA: ");
-  Serial.println(FIRMWARE_RELEASE);
-
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n'); // Lê até Enter
     command.trim(); // Remove espaços/brancos
@@ -614,21 +622,10 @@ void loop() {
     handleMQTTCommand(sPayload);
   }
 
-
   CheckFactoryReset();
 
       int max_tent = 3; // Número máximo de tentativas de reconexão
       int tent = 0;   // Contador de tentativas
-
-          if (!client.connected()) {
-            Serial.println("MQTT desconectado, tentando reconectar...");
-              if (client.connect(WI_Address.c_str())) {
-                Serial.println("Reconectado ao MQTT!");
-                client.subscribe(WI_Address.c_str()); // <--- REFAZ O SUBSCRIBE AQUI
-                } else {
-            Serial.println("Falha ao reconectar MQTT.");
-                }
-          }
 
             // Se não conseguir conectar após 3 tentativas, reinicia a ESP
 
@@ -1671,6 +1668,7 @@ int maxTentativas = 3;  // Número máximo de tentativas
 
     return false;
   }
+  //checkAndUpdateOTA();
 }
 
 void SetupMQTT() {
@@ -2328,6 +2326,53 @@ unsigned long getpass_do_lolis (unsigned long difference, unsigned long seed) {
 }
 
 
+void LEDFIRSTOTA(){
+
+  int delayTime = 10; // Tempo em milissegundos que cada LED ficará ligado
+
+    // Liga P1_LED e desliga os outros
+    digitalWrite(P1_LED, HIGH);
+    digitalWrite(P2_LED, HIGH);
+    digitalWrite(P3_LED, HIGH);
+    delay(delayTime);
+
+    // Liga P2_LED e desliga os outros
+    digitalWrite(P1_LED, LOW);
+    digitalWrite(P2_LED, HIGH);
+    digitalWrite(P3_LED, HIGH);
+    delay(delayTime);
+
+    // Liga P3_LED e desliga os outros
+    digitalWrite(P1_LED, LOW);
+    digitalWrite(P2_LED, LOW);
+    digitalWrite(P3_LED, HIGH);
+    delay(delayTime);
+
+        // Liga desliga tudo
+    digitalWrite(P1_LED, LOW);
+    digitalWrite(P2_LED, LOW);
+    digitalWrite(P3_LED, LOW);
+    delay(delayTime);
+ 
+            // Liga desliga tudo
+    digitalWrite(P1_LED, LOW);
+    digitalWrite(P2_LED, LOW);
+    digitalWrite(P3_LED, HIGH);
+    delay(delayTime);
+
+                // Liga desliga tudo
+    digitalWrite(P1_LED, LOW);
+    digitalWrite(P2_LED, HIGH);
+    digitalWrite(P3_LED, HIGH);
+    delay(delayTime);
+
+                    // Liga desliga tudo
+    digitalWrite(P1_LED, HIGH);
+    digitalWrite(P2_LED, HIGH);
+    digitalWrite(P3_LED, HIGH);
+    delay(delayTime);
+}
+
 
 void handleMQTTCommand(std::string sPayload) {
   uint8_t i, j, k;
@@ -2420,18 +2465,43 @@ void handleMQTTCommand(std::string sPayload) {
 
 
 
-
 void checkAndUpdateOTA() {
-  const char* firmwareUrl = "https://ota-ci.vercel.app/CI_311.bin";
+
+
 
   WiFiClientSecure client;
-  // Removido: client.setInsecure();  // Sua versão não tem isso
 
   HTTPClient https;
 
-  // Removido: https.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  Serial.println("[OTA] Verificando versão...");
+ 
+  if (https.begin(client, versionUrl)) {
+    int httpCode = https.GET();
+    if (httpCode == HTTP_CODE_OK) {
+      String newVersion = https.getString();
+      newVersion.trim(); // remove \n ou espaços
 
-  Serial.println("[OTA] Conectando ao servidor...");
+      Serial.printf("[OTA] Versão disponível: %s\n", newVersion.c_str());
+
+      if (newVersion == FIRMWARE_RELEASE) {
+        Serial.println("[OTA] Firmware já está atualizado.");
+        https.end();
+        return;
+      }
+      LEDFIRSTOTA();
+      Serial.println("[OTA] Nova versão detectada. Iniciando atualização...");
+    } else {
+      Serial.printf("[OTA] Falha ao obter versão: HTTP %d\n", httpCode);
+      https.end();
+      return;
+    }
+    https.end();
+  } else {
+    Serial.println("[OTA] Erro ao conectar ao servidor de versão.");
+    return;
+  }
+
+  // Aqui continua o seu código OTA normalmente
   if (https.begin(client, firmwareUrl)) {
     int httpCode = https.GET();
 
@@ -2473,4 +2543,3 @@ void checkAndUpdateOTA() {
     Serial.println("[OTA] Falha ao conectar à URL");
   }
 }
-
